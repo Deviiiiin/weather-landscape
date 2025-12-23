@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>风景新标签页</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; position: relative; }
+        
+        /* 背景图样式：保留过渡效果，加载更顺滑 */
+        #bg-img {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            z-index: -1;
+            transition: opacity 0.5s ease;
+        }
+        #bg-img.fallback {
+            opacity: 0.8;
+        }
+
+        /* 简化加载提示：仅顶部轻量提示，不遮挡风景 */
+        #loading-tip {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 13px;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 6px 16px;
+            border-radius: 15px;
+            backdrop-filter: blur(5px);
+            z-index: 20;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- 兜底图：优先显示，加载极快 -->
+    <img id="bg-img" class="fallback" src="https://images.pexels.com/photos/1039798/pexels-photo-1039798.jpeg?auto=compress&cs=tinysrgb&w=1920" alt="天气+时段匹配风景">
+    <!-- 加载提示（必要时显示） -->
+    <div id="loading-tip">加载中...</div>
+
+    <script>
+        // 1. API Key（保持不变）
+        const PEXELS_API_KEY = "lqOaQCzRbfr0BDueszU1hf1ZSQCmKdx1ifiVvDWUDIC1Xn8MZMmyh5rl";
+        const WEATHER_API_KEY = "8196f3fc5ba63922bb1e35265baadb35";
+
+        // 2. 时段配置（保持不变）
+        const TIME_PERIODS = [
+            { start: 21, end: 2, name: "深夜", desc: "星空静谧" },
+            { start: 2, end: 5, name: "凌晨", desc: "万籁俱静" },
+            { start: 5, end: 7, name: "清晨", desc: "微光薄雾" },
+            { start: 7, end: 12, name: "上午", desc: "明亮清新" },
+            { start: 12, end: 17, name: "下午", desc: "晴空暖阳" },
+            { start: 17, end: 21, name: "傍晚", desc: "晚霞鎏金" }
+        ];
+
+        // 3. 天气映射（保持不变）
+        const WEATHER_MAPPING = {
+            Clear: { titleSuffix: "·晴空万里", keywords: "clear sky, bright sun, vibrant landscape, blue sky nature" },
+            Clouds: { titleSuffix: "·云卷云舒", keywords: "cloudy sky, overcast landscape, soft light nature, misty cloud" },
+            Rain: { titleSuffix: "·烟雨朦胧", keywords: "rainy landscape, misty forest, rainy day nature, wet ground, light rain" },
+            Drizzle: { titleSuffix: "·细雨绵绵", keywords: "light drizzle, gentle rain, misty nature, damp landscape" },
+            Thunderstorm: { titleSuffix: "·雷雨磅礴", keywords: "thunderstorm, dramatic sky, dark clouds, rainstorm landscape" },
+            Snow: { titleSuffix: "·白雪皑皑", keywords: "snowy landscape, winter snow, white nature, snow-covered mountain" },
+            Fog: { titleSuffix: "·雾锁山河", keywords: "foggy landscape, misty mountain, fog nature, hazy scenery" },
+            Mist: { titleSuffix: "·薄雾缭绕", keywords: "misty landscape, light fog, hazy nature, soft focus scenery" },
+            Smoke: { titleSuffix: "·烟岚缥缈", keywords: "smoky landscape, hazy sky, misty nature, soft smoke scenery" },
+            Haze: { titleSuffix: "·轻霾笼山", keywords: "hazy landscape, soft light nature, muted colors scenery" }
+        };
+
+        // 4. 图片去重（保持不变）
+        const USED_PHOTO_IDS_KEY = "used-pexels-photo-ids";
+        function getUsedPhotoIds() {
+            const stored = localStorage.getItem(USED_PHOTO_IDS_KEY);
+            return stored ? JSON.parse(stored) : [];
+        }
+        function saveUsedPhotoId(photoId) {
+            const usedIds = getUsedPhotoIds();
+            if (!usedIds.includes(photoId)) {
+                usedIds.push(photoId);
+                if (usedIds.length > 100) usedIds.shift();
+                localStorage.setItem(USED_PHOTO_IDS_KEY, JSON.stringify(usedIds));
+            }
+        }
+
+        // 5. 获取时段（保持不变）
+        function getCurrentPeriod() {
+            const hour = new Date().getHours();
+            for (const period of TIME_PERIODS) {
+                if (period.start <= period.end ? (hour >= period.start && hour < period.end) : (hour >= period.start || hour < period.end)) {
+                    return period;
+                }
+            }
+            return TIME_PERIODS[3];
+        }
+
+        // 6. 天气缓存（1小时过期，保持不变）
+        const WEATHER_CACHE_KEY = "cached-weather-data";
+        const WEATHER_CACHE_EXPIRE = 3600000;
+        function getCachedWeather() {
+            const cached = localStorage.getItem(WEATHER_CACHE_KEY);
+            if (!cached) return null;
+            const { data, timestamp } = JSON.parse(cached);
+            if (Date.now() - timestamp < WEATHER_CACHE_EXPIRE) return data;
+            localStorage.removeItem(WEATHER_CACHE_KEY);
+            return null;
+        }
+        function saveWeatherCache(weatherData) {
+            localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({
+                data: weatherData,
+                timestamp: Date.now()
+            }));
+        }
+
+        // 7. 定位+天气获取（保持不变）
+        async function getWeatherData() {
+            const cachedWeather = getCachedWeather();
+            if (cachedWeather) return cachedWeather;
+
+            let location;
+            try {
+                location = await Promise.race([
+                    getUserLocation(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("定位超时")), 10000))
+                ]);
+            } catch (error) {
+                console.log("定位失败，使用默认天气：", error.message);
+                const defaultWeather = { main: "Clear", description: "晴", temp: 25 };
+                saveWeatherCache(defaultWeather);
+                return defaultWeather;
+            }
+
+            try {
+                const weatherRes = await Promise.race([
+                    fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${location.lat}&lon=${location.lon}&appid=${WEATHER_API_KEY}&units=metric&lang=zh_cn`),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("天气API超时")), 10000))
+                ]);
+                if (!weatherRes.ok) throw new Error("天气数据获取失败");
+                const weatherData = await weatherRes.json();
+                const result = {
+                    main: weatherData.weather[0].main,
+                    description: weatherData.weather[0].description,
+                    temp: Math.round(weatherData.main.temp)
+                };
+                saveWeatherCache(result);
+                return result;
+            } catch (error) {
+                console.log("天气API失败，使用默认天气：", error.message);
+                const defaultWeather = { main: "Clear", description: "晴", temp: 25 };
+                saveWeatherCache(defaultWeather);
+                return defaultWeather;
+            }
+        }
+
+        // 定位函数（简化）
+        function getUserLocation() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject(new Error("浏览器不支持定位"));
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+                    (err) => reject(new Error(`定位拒绝：${err.message}`))
+                );
+            });
+        }
+
+        // 8. 生成组合数据（保持不变）
+        async function getCombinedData() {
+            const period = getCurrentPeriod();
+            const weather = await getWeatherData();
+            const weatherConfig = WEATHER_MAPPING[weather.main] || WEATHER_MAPPING.Clear;
+            
+            const periodKeywords = {
+                "深夜": "night sky, stars",
+                "凌晨": "deep night, dark mountain",
+                "清晨": "dawn glow, first light",
+                "上午": "fresh green forest, sunny meadow",
+                "下午": "blue sea, clear mountain",
+                "傍晚": "sunset, evening glow"
+            }[period.name];
+
+            return {
+                title: `${period.name}${weatherConfig.titleSuffix}`,
+                keywords: `${weatherConfig.keywords}, ${periodKeywords}`,
+                weatherMain: weather.main
+            };
+        }
+
+        // 9. 核心加载函数（删除按钮相关逻辑）
+        const bgImg = document.getElementById('bg-img');
+        const loadingTip = document.getElementById('loading-tip');
+        let combinedData = null;
+
+        // 缓存键（保持不变）
+        function getCacheKeys(weatherMain = "Clear") {
+            const today = new Date().toISOString().split('T')[0];
+            const cacheSegment = Math.floor(new Date().getHours() / 3);
+            return {
+                imgKey: `bg-img-${today}-${cacheSegment}-${weatherMain}`,
+                infoKey: `bg-img-info-${today}-${cacheSegment}-${weatherMain}`
+            };
+        }
+
+        // 加载图片（删除按钮相关状态切换）
+        async function loadBackgroundImage() {
+            loadingTip.style.display = "block";
+
+            if (!combinedData) {
+                combinedData = await getCombinedData();
+                document.title = combinedData.title;
+            }
+
+            const { keywords, weatherMain } = combinedData;
+            const usedIds = getUsedPhotoIds();
+            const { imgKey, infoKey } = getCacheKeys(weatherMain);
+            const cachedImg = localStorage.getItem(imgKey);
+
+            // 缓存有效则直接使用
+            if (cachedImg) {
+                bgImg.src = cachedImg;
+                bgImg.classList.remove("fallback");
+                loadingTip.style.display = "none";
+                return;
+            }
+
+            // 缓存无效，调用图片API
+            try {
+                const page = Math.floor(usedIds.length / 1) + 1;
+                const imgRes = await Promise.race([
+                    fetch(`https://api.pexels.com/v1/search?query=${keywords}&per_page=1&page=${page}`, {
+                        headers: { Authorization: PEXELS_API_KEY }
+                    }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("图片API超时")), 10000))
+                ]);
+
+                if (!imgRes.ok) throw new Error("图片API请求失败");
+                const imgData = await imgRes.json();
+                if (!imgData.photos || imgData.photos.length === 0) throw new Error("无匹配图片");
+
+                const photo = imgData.photos[0];
+                const imgUrl = photo.src.large; // 中等尺寸，加载更快
+                const photoId = photo.id.toString();
+
+                if (!usedIds.includes(photoId)) {
+                    bgImg.src = imgUrl;
+                    localStorage.setItem(imgKey, imgUrl);
+                    saveUsedPhotoId(photoId);
+                } else {
+                    return loadBackgroundImage();
+                }
+            } catch (error) {
+                // 降级：用Unsplash中等尺寸图
+                const fallbackKeywords = keywords.replace(/,/g, '+');
+                bgImg.src = `https://source.unsplash.com/1920x1080/?${fallbackKeywords}`;
+            }
+
+            // 加载完成
+            bgImg.classList.remove("fallback");
+            loadingTip.style.display = "none";
+        }
+
+        // 初始化加载
+        window.addEventListener("load", () => {
+            loadBackgroundImage();
+        });
+    </script>
+</body>
+</html>
