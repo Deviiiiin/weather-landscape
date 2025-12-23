@@ -8,7 +8,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; position: relative; }
         
-        /* 背景图样式：保留过渡效果，加载更顺滑 */
+        /* 背景图样式：预加载过渡，避免模糊闪烁 */
         #bg-img {
             position: fixed;
             top: 0;
@@ -17,13 +17,14 @@
             height: 100vh;
             object-fit: cover;
             z-index: -1;
-            transition: opacity 0.5s ease;
+            opacity: 0;
+            transition: opacity 0.8s ease-in-out; /* 平滑淡入 */
         }
-        #bg-img.fallback {
-            opacity: 0.8;
+        #bg-img.visible {
+            opacity: 1;
         }
 
-        /* 简化加载提示：仅顶部轻量提示，不遮挡风景 */
+        /* 加载提示：简洁不遮挡 */
         #loading-tip {
             position: fixed;
             top: 20px;
@@ -41,9 +42,8 @@
     </style>
 </head>
 <body>
-    <!-- 兜底图：优先显示，加载极快 -->
-    <img id="bg-img" class="fallback" src="https://images.pexels.com/photos/1039798/pexels-photo-1039798.jpeg?auto=compress&cs=tinysrgb&w=1920" alt="天气+时段匹配风景">
-    <!-- 加载提示（必要时显示） -->
+    <!-- 高清兜底图：1920x1080 分辨率，确保初始清晰 -->
+    <img id="bg-img" alt="天气+时段匹配风景" src="https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080">
     <div id="loading-tip">加载中...</div>
 
     <script>
@@ -61,36 +61,72 @@
             { start: 17, end: 21, name: "傍晚", desc: "晚霞鎏金" }
         ];
 
-        // 3. 天气映射（保持不变）
+        // 3. 天气映射（新增高清关键词）
         const WEATHER_MAPPING = {
-            Clear: { titleSuffix: "·晴空万里", keywords: "clear sky, bright sun, vibrant landscape, blue sky nature" },
-            Clouds: { titleSuffix: "·云卷云舒", keywords: "cloudy sky, overcast landscape, soft light nature, misty cloud" },
-            Rain: { titleSuffix: "·烟雨朦胧", keywords: "rainy landscape, misty forest, rainy day nature, wet ground, light rain" },
-            Drizzle: { titleSuffix: "·细雨绵绵", keywords: "light drizzle, gentle rain, misty nature, damp landscape" },
-            Thunderstorm: { titleSuffix: "·雷雨磅礴", keywords: "thunderstorm, dramatic sky, dark clouds, rainstorm landscape" },
-            Snow: { titleSuffix: "·白雪皑皑", keywords: "snowy landscape, winter snow, white nature, snow-covered mountain" },
-            Fog: { titleSuffix: "·雾锁山河", keywords: "foggy landscape, misty mountain, fog nature, hazy scenery" },
-            Mist: { titleSuffix: "·薄雾缭绕", keywords: "misty landscape, light fog, hazy nature, soft focus scenery" },
-            Smoke: { titleSuffix: "·烟岚缥缈", keywords: "smoky landscape, hazy sky, misty nature, soft smoke scenery" },
-            Haze: { titleSuffix: "·轻霾笼山", keywords: "hazy landscape, soft light nature, muted colors scenery" }
+            Clear: { titleSuffix: "·晴空万里", keywords: "clear sky, bright sun, vibrant landscape, blue sky nature, high resolution, sharp, clear" },
+            Clouds: { titleSuffix: "·云卷云舒", keywords: "cloudy sky, overcast landscape, soft light nature, misty cloud, high resolution, sharp, clear" },
+            Rain: { titleSuffix: "·烟雨朦胧", keywords: "rainy landscape, misty forest, rainy day nature, wet ground, light rain, high resolution, sharp, clear" },
+            Drizzle: { titleSuffix: "·细雨绵绵", keywords: "light drizzle, gentle rain, misty nature, damp landscape, high resolution, sharp, clear" },
+            Thunderstorm: { titleSuffix: "·雷雨磅礴", keywords: "thunderstorm, dramatic sky, dark clouds, rainstorm landscape, high resolution, sharp, clear" },
+            Snow: { titleSuffix: "·白雪皑皑", keywords: "snowy landscape, winter snow, white nature, snow-covered mountain, high resolution, sharp, clear" },
+            Fog: { titleSuffix: "·雾锁山河", keywords: "foggy landscape, misty mountain, fog nature, hazy scenery, high resolution, sharp, clear" },
+            Mist: { titleSuffix: "·薄雾缭绕", keywords: "misty landscape, light fog, hazy nature, soft focus scenery, high resolution, sharp, clear" },
+            Smoke: { titleSuffix: "·烟岚缥缈", keywords: "smoky landscape, hazy sky, misty nature, soft smoke scenery, high resolution, sharp, clear" },
+            Haze: { titleSuffix: "·轻霾笼山", keywords: "hazy landscape, soft light nature, muted colors scenery, high resolution, sharp, clear" }
         };
 
-        // 4. 图片去重（保持不变）
-        const USED_PHOTO_IDS_KEY = "used-pexels-photo-ids";
-        function getUsedPhotoIds() {
-            const stored = localStorage.getItem(USED_PHOTO_IDS_KEY);
+        // 4. 优化去重逻辑：全局去重+当日时段缓存
+        const STORAGE_KEYS = {
+            GLOBAL_USED_PHOTOS: "global-used-photo-ids", // 全局历史图片ID（永久去重）
+            DAILY_PERIOD_PHOTO: "daily-period-current-photo" // 当日时段图片缓存（当天同时段不刷新）
+        };
+
+        // 获取全局已使用图片ID（永久去重）
+        function getGlobalUsedPhotoIds() {
+            const stored = localStorage.getItem(STORAGE_KEYS.GLOBAL_USED_PHOTOS);
             return stored ? JSON.parse(stored) : [];
         }
-        function saveUsedPhotoId(photoId) {
-            const usedIds = getUsedPhotoIds();
+
+        // 保存全局已使用图片ID（上限200张，避免存储过大）
+        function saveGlobalUsedPhotoId(photoId) {
+            let usedIds = getGlobalUsedPhotoIds();
             if (!usedIds.includes(photoId)) {
                 usedIds.push(photoId);
-                if (usedIds.length > 100) usedIds.shift();
-                localStorage.setItem(USED_PHOTO_IDS_KEY, JSON.stringify(usedIds));
+                if (usedIds.length > 200) usedIds.shift(); // 超过200张，删除最早的
+                localStorage.setItem(STORAGE_KEYS.GLOBAL_USED_PHOTOS, JSON.stringify(usedIds));
             }
         }
 
-        // 5. 获取时段（保持不变）
+        // 获取当日时段缓存图片（格式：{date: "20251224", period: "上午", photoId: "xxx", imgUrl: "xxx"}）
+        function getDailyPeriodCachedPhoto() {
+            const stored = localStorage.getItem(STORAGE_KEYS.DAILY_PERIOD_PHOTO);
+            if (!stored) return null;
+            return JSON.parse(stored);
+        }
+
+        // 保存当日时段缓存图片（当天同时段复用）
+        function saveDailyPeriodCachedPhoto(photoData) {
+            const today = getCurrentDateStr();
+            const period = getCurrentPeriod().name;
+            const data = {
+                date: today,
+                period: period,
+                photoId: photoData.id,
+                imgUrl: photoData.url
+            };
+            localStorage.setItem(STORAGE_KEYS.DAILY_PERIOD_PHOTO, JSON.stringify(data));
+        }
+
+        // 辅助工具：获取当前日期字符串（格式：20251224）
+        function getCurrentDateStr() {
+            const date = new Date();
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            const day = String(date.getDate()).padStart(2, "0");
+            return `${year}${month}${day}`;
+        }
+
+        // 5. 获取当前时段（保持不变）
         function getCurrentPeriod() {
             const hour = new Date().getHours();
             for (const period of TIME_PERIODS) {
@@ -98,7 +134,7 @@
                     return period;
                 }
             }
-            return TIME_PERIODS[3];
+            return TIME_PERIODS[3]; // 兜底：上午
         }
 
         // 6. 天气缓存（1小时过期，保持不变）
@@ -180,12 +216,12 @@
             const weatherConfig = WEATHER_MAPPING[weather.main] || WEATHER_MAPPING.Clear;
             
             const periodKeywords = {
-                "深夜": "night sky, stars",
-                "凌晨": "deep night, dark mountain",
-                "清晨": "dawn glow, first light",
-                "上午": "fresh green forest, sunny meadow",
-                "下午": "blue sea, clear mountain",
-                "傍晚": "sunset, evening glow"
+                "深夜": "night sky, stars, high resolution",
+                "凌晨": "deep night, dark mountain, high resolution",
+                "清晨": "dawn glow, first light, high resolution",
+                "上午": "fresh green forest, sunny meadow, high resolution",
+                "下午": "blue sea, clear mountain, high resolution",
+                "傍晚": "sunset, evening glow, high resolution"
             }[period.name];
 
             return {
@@ -195,77 +231,119 @@
             };
         }
 
-        // 9. 核心加载函数（删除按钮相关逻辑）
+        // 9. 核心优化：图片加载+清晰度校验+精准去重
         const bgImg = document.getElementById('bg-img');
         const loadingTip = document.getElementById('loading-tip');
         let combinedData = null;
 
-        // 缓存键（保持不变）
-        function getCacheKeys(weatherMain = "Clear") {
-            const today = new Date().toISOString().split('T')[0];
-            const cacheSegment = Math.floor(new Date().getHours() / 3);
+        // 预加载图片（确保加载完成后再显示，避免模糊）
+        function preloadImage(url) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = url;
+                img.onload = () => {
+                    // 清晰度校验：至少1920x1080分辨率
+                    if (img.naturalWidth >= 1920 && img.naturalHeight >= 1080) {
+                        resolve(url);
+                    } else {
+                        reject(new Error("图片分辨率不足，重新加载"));
+                    }
+                };
+                img.onerror = () => reject(new Error("图片加载失败"));
+            });
+        }
+
+        // 从Pexels获取高清图片（过滤全局已使用ID）
+        async function fetchHighQualityPhoto(keywords) {
+            const globalUsedIds = getGlobalUsedPhotoIds();
+            let page = 1;
+            const maxPages = 10; // 最多尝试10页，避免无限循环
+
+            while (page <= maxPages) {
+                try {
+                    const res = await fetch(`https://api.pexels.com/v1/search?query=${keywords}&per_page=15&page=${page}`, {
+                        headers: { Authorization: PEXELS_API_KEY }
+                    });
+
+                    if (!res.ok) throw new Error(`Pexels API请求失败：${res.status}`);
+                    const data = await res.json();
+                    if (!data.photos || data.photos.length === 0) throw new Error("无匹配图片");
+
+                    // 筛选：未在全局去重列表中，且支持fullHD尺寸
+                    const availablePhotos = data.photos.filter(photo => 
+                        !globalUsedIds.includes(photo.id.toString()) && 
+                        photo.src.fullHD // 确保有1920x1080尺寸
+                    );
+
+                    if (availablePhotos.length > 0) {
+                        const randomPhoto = availablePhotos[Math.floor(Math.random() * availablePhotos.length)];
+                        const imgUrl = randomPhoto.src.fullHD; // 优先用fullHD尺寸（1920x1080）
+                        const photoId = randomPhoto.id.toString();
+                        return { imgUrl, photoId };
+                    }
+
+                    page++; // 当前页无可用图片，翻下一页
+                } catch (error) {
+                    console.log("获取图片失败：", error.message);
+                    page++;
+                }
+            }
+
+            // 所有页面都无可用图片，返回兜底高清图
             return {
-                imgKey: `bg-img-${today}-${cacheSegment}-${weatherMain}`,
-                infoKey: `bg-img-info-${today}-${cacheSegment}-${weatherMain}`
+                imgUrl: "https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                photoId: "fallback-1640774"
             };
         }
 
-        // 加载图片（删除按钮相关状态切换）
+        // 主加载函数
         async function loadBackgroundImage() {
             loadingTip.style.display = "block";
+            bgImg.classList.remove("visible"); // 隐藏当前图片，准备加载新图
 
-            if (!combinedData) {
-                combinedData = await getCombinedData();
-                document.title = combinedData.title;
-            }
-
-            const { keywords, weatherMain } = combinedData;
-            const usedIds = getUsedPhotoIds();
-            const { imgKey, infoKey } = getCacheKeys(weatherMain);
-            const cachedImg = localStorage.getItem(imgKey);
-
-            // 缓存有效则直接使用
-            if (cachedImg) {
-                bgImg.src = cachedImg;
-                bgImg.classList.remove("fallback");
-                loadingTip.style.display = "none";
-                return;
-            }
-
-            // 缓存无效，调用图片API
             try {
-                const page = Math.floor(usedIds.length / 1) + 1;
-                const imgRes = await Promise.race([
-                    fetch(`https://api.pexels.com/v1/search?query=${keywords}&per_page=1&page=${page}`, {
-                        headers: { Authorization: PEXELS_API_KEY }
-                    }),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error("图片API超时")), 10000))
-                ]);
+                // 1. 先查当日时段缓存：同一天同时段直接复用
+                const dailyCache = getDailyPeriodCachedPhoto();
+                const today = getCurrentDateStr();
+                const currentPeriod = getCurrentPeriod().name;
 
-                if (!imgRes.ok) throw new Error("图片API请求失败");
-                const imgData = await imgRes.json();
-                if (!imgData.photos || imgData.photos.length === 0) throw new Error("无匹配图片");
-
-                const photo = imgData.photos[0];
-                const imgUrl = photo.src.large; // 中等尺寸，加载更快
-                const photoId = photo.id.toString();
-
-                if (!usedIds.includes(photoId)) {
-                    bgImg.src = imgUrl;
-                    localStorage.setItem(imgKey, imgUrl);
-                    saveUsedPhotoId(photoId);
-                } else {
-                    return loadBackgroundImage();
+                if (dailyCache && dailyCache.date === today && dailyCache.period === currentPeriod) {
+                    // 校验缓存图片是否有效（未被全局去重删除）
+                    const globalUsedIds = getGlobalUsedPhotoIds();
+                    if (!globalUsedIds.includes(dailyCache.photoId)) {
+                        await preloadImage(dailyCache.imgUrl); // 预加载+清晰度校验
+                        bgImg.src = dailyCache.imgUrl;
+                        bgImg.classList.add("visible");
+                        loadingTip.style.display = "none";
+                        return;
+                    }
                 }
-            } catch (error) {
-                // 降级：用Unsplash中等尺寸图
-                const fallbackKeywords = keywords.replace(/,/g, '+');
-                bgImg.src = `https://source.unsplash.com/1920x1080/?${fallbackKeywords}`;
-            }
 
-            // 加载完成
-            bgImg.classList.remove("fallback");
-            loadingTip.style.display = "none";
+                // 2. 无缓存/缓存失效，获取新图片
+                if (!combinedData) {
+                    combinedData = await getCombinedData();
+                    document.title = combinedData.title;
+                }
+
+                const { keywords } = combinedData;
+                // 获取高清图片（过滤全局去重）
+                const { imgUrl, photoId } = await fetchHighQualityPhoto(keywords);
+                // 预加载+清晰度校验
+                await preloadImage(imgUrl);
+                // 更新DOM和缓存
+                bgImg.src = imgUrl;
+                saveDailyPeriodCachedPhoto({ id: photoId, url: imgUrl }); // 保存当日时段缓存
+                saveGlobalUsedPhotoId(photoId); // 加入全局去重列表
+                bgImg.classList.add("visible");
+
+            } catch (error) {
+                console.log("加载图片异常，使用兜底图：", error.message);
+                // 降级显示高清兜底图
+                bgImg.src = "https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080";
+                bgImg.classList.add("visible");
+            } finally {
+                loadingTip.style.display = "none";
+            }
         }
 
         // 初始化加载
