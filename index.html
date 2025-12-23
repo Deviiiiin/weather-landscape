@@ -42,8 +42,8 @@
     </style>
 </head>
 <body>
-    <!-- 高清兜底图：1920x1080 分辨率，确保初始清晰 -->
-    <img id="bg-img" alt="天气+时段匹配风景" src="https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080">
+    <!-- 高清兜底图：选压缩均衡的large尺寸，确保初始清晰 -->
+    <img id="bg-img" alt="天气+时段匹配风景" src="https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1600">
     <div id="loading-tip">加载中...</div>
 
     <script>
@@ -61,21 +61,21 @@
             { start: 17, end: 21, name: "傍晚", desc: "晚霞鎏金" }
         ];
 
-        // 3. 天气映射（新增高清关键词）
+        // 3. 天气映射：去掉滤镜感关键词，保留原生高清
         const WEATHER_MAPPING = {
-            Clear: { titleSuffix: "·晴空万里", keywords: "clear sky, bright sun, vibrant landscape, blue sky nature, high resolution, sharp, clear" },
-            Clouds: { titleSuffix: "·云卷云舒", keywords: "cloudy sky, overcast landscape, soft light nature, misty cloud, high resolution, sharp, clear" },
-            Rain: { titleSuffix: "·烟雨朦胧", keywords: "rainy landscape, misty forest, rainy day nature, wet ground, light rain, high resolution, sharp, clear" },
-            Drizzle: { titleSuffix: "·细雨绵绵", keywords: "light drizzle, gentle rain, misty nature, damp landscape, high resolution, sharp, clear" },
-            Thunderstorm: { titleSuffix: "·雷雨磅礴", keywords: "thunderstorm, dramatic sky, dark clouds, rainstorm landscape, high resolution, sharp, clear" },
-            Snow: { titleSuffix: "·白雪皑皑", keywords: "snowy landscape, winter snow, white nature, snow-covered mountain, high resolution, sharp, clear" },
-            Fog: { titleSuffix: "·雾锁山河", keywords: "foggy landscape, misty mountain, fog nature, hazy scenery, high resolution, sharp, clear" },
-            Mist: { titleSuffix: "·薄雾缭绕", keywords: "misty landscape, light fog, hazy nature, soft focus scenery, high resolution, sharp, clear" },
-            Smoke: { titleSuffix: "·烟岚缥缈", keywords: "smoky landscape, hazy sky, misty nature, soft smoke scenery, high resolution, sharp, clear" },
-            Haze: { titleSuffix: "·轻霾笼山", keywords: "hazy landscape, soft light nature, muted colors scenery, high resolution, sharp, clear" }
+            Clear: { titleSuffix: "·晴空万里", keywords: "clear sky, bright sun, vibrant landscape, blue sky nature, natural, high resolution" },
+            Clouds: { titleSuffix: "·云卷云舒", keywords: "cloudy sky, overcast landscape, soft light nature, misty cloud, natural, high resolution" },
+            Rain: { titleSuffix: "·烟雨朦胧", keywords: "rainy landscape, misty forest, rainy day nature, wet ground, light rain, natural, high resolution" },
+            Drizzle: { titleSuffix: "·细雨绵绵", keywords: "light drizzle, gentle rain, misty nature, damp landscape, natural, high resolution" },
+            Thunderstorm: { titleSuffix: "·雷雨磅礴", keywords: "thunderstorm, dramatic sky, dark clouds, rainstorm landscape, natural, high resolution" },
+            Snow: { titleSuffix: "·白雪皑皑", keywords: "snowy landscape, winter snow, white nature, snow-covered mountain, natural, high resolution" },
+            Fog: { titleSuffix: "·雾锁山河", keywords: "foggy landscape, misty mountain, fog nature, hazy scenery, natural, high resolution" },
+            Mist: { titleSuffix: "·薄雾缭绕", keywords: "misty landscape, light fog, hazy nature, soft focus scenery, natural, high resolution" },
+            Smoke: { titleSuffix: "·烟岚缥缈", keywords: "smoky landscape, hazy sky, misty nature, soft smoke scenery, natural, high resolution" },
+            Haze: { titleSuffix: "·轻霾笼山", keywords: "hazy landscape, soft light nature, muted colors scenery, natural, high resolution" }
         };
 
-        // 4. 优化去重逻辑：全局去重+当日时段缓存
+        // 4. 优化去重逻辑：全局去重+当日时段缓存（保持不变，满足你的需求）
         const STORAGE_KEYS = {
             GLOBAL_USED_PHOTOS: "global-used-photo-ids", // 全局历史图片ID（永久去重）
             DAILY_PERIOD_PHOTO: "daily-period-current-photo" // 当日时段图片缓存（当天同时段不刷新）
@@ -97,14 +97,14 @@
             }
         }
 
-        // 获取当日时段缓存图片（格式：{date: "20251224", period: "上午", photoId: "xxx", imgUrl: "xxx"}）
+        // 获取当日时段缓存图片
         function getDailyPeriodCachedPhoto() {
             const stored = localStorage.getItem(STORAGE_KEYS.DAILY_PERIOD_PHOTO);
             if (!stored) return null;
             return JSON.parse(stored);
         }
 
-        // 保存当日时段缓存图片（当天同时段复用）
+        // 保存当日时段缓存图片
         function saveDailyPeriodCachedPhoto(photoData) {
             const today = getCurrentDateStr();
             const period = getCurrentPeriod().name;
@@ -209,19 +209,19 @@
             });
         }
 
-        // 8. 生成组合数据（保持不变）
+        // 8. 生成组合数据（关键词调整为原生高清）
         async function getCombinedData() {
             const period = getCurrentPeriod();
             const weather = await getWeatherData();
             const weatherConfig = WEATHER_MAPPING[weather.main] || WEATHER_MAPPING.Clear;
             
             const periodKeywords = {
-                "深夜": "night sky, stars, high resolution",
-                "凌晨": "deep night, dark mountain, high resolution",
-                "清晨": "dawn glow, first light, high resolution",
-                "上午": "fresh green forest, sunny meadow, high resolution",
-                "下午": "blue sea, clear mountain, high resolution",
-                "傍晚": "sunset, evening glow, high resolution"
+                "深夜": "night sky, stars, natural, high resolution",
+                "凌晨": "deep night, dark mountain, natural, high resolution",
+                "清晨": "dawn glow, first light, natural, high resolution",
+                "上午": "fresh green forest, sunny meadow, natural, high resolution",
+                "下午": "blue sea, clear mountain, natural, high resolution",
+                "傍晚": "sunset, evening glow, natural, high resolution"
             }[period.name];
 
             return {
@@ -231,7 +231,7 @@
             };
         }
 
-        // 9. 核心优化：图片加载+清晰度校验+精准去重
+        // 9. 核心优化：回归large尺寸（压缩均衡更清晰）+ 原生高清筛选
         const bgImg = document.getElementById('bg-img');
         const loadingTip = document.getElementById('loading-tip');
         let combinedData = null;
@@ -242,8 +242,8 @@
                 const img = new Image();
                 img.src = url;
                 img.onload = () => {
-                    // 清晰度校验：至少1920x1080分辨率
-                    if (img.naturalWidth >= 1920 && img.naturalHeight >= 1080) {
+                    // 清晰度校验：至少1600x900（large尺寸的优质分辨率）
+                    if (img.naturalWidth >= 1600 && img.naturalHeight >= 900) {
                         resolve(url);
                     } else {
                         reject(new Error("图片分辨率不足，重新加载"));
@@ -253,7 +253,7 @@
             });
         }
 
-        // 从Pexels获取高清图片（过滤全局已使用ID）
+        // 从Pexels获取优质large尺寸图片（压缩均衡，视觉更清晰）
         async function fetchHighQualityPhoto(keywords) {
             const globalUsedIds = getGlobalUsedPhotoIds();
             let page = 1;
@@ -269,15 +269,16 @@
                     const data = await res.json();
                     if (!data.photos || data.photos.length === 0) throw new Error("无匹配图片");
 
-                    // 筛选：未在全局去重列表中，且支持fullHD尺寸
+                    // 筛选：未在全局去重列表中，且large尺寸优质
                     const availablePhotos = data.photos.filter(photo => 
                         !globalUsedIds.includes(photo.id.toString()) && 
-                        photo.src.fullHD // 确保有1920x1080尺寸
+                        photo.src.large && // 确保有large尺寸
+                        photo.width >= 1600 && photo.height >= 900 // 原生分辨率达标
                     );
 
                     if (availablePhotos.length > 0) {
                         const randomPhoto = availablePhotos[Math.floor(Math.random() * availablePhotos.length)];
-                        const imgUrl = randomPhoto.src.fullHD; // 优先用fullHD尺寸（1920x1080）
+                        const imgUrl = randomPhoto.src.large; // 用large尺寸（压缩均衡，视觉更清晰）
                         const photoId = randomPhoto.id.toString();
                         return { imgUrl, photoId };
                     }
@@ -289,14 +290,14 @@
                 }
             }
 
-            // 所有页面都无可用图片，返回兜底高清图
+            // 兜底高清图（large尺寸，压缩均衡）
             return {
-                imgUrl: "https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                imgUrl: "https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1600",
                 photoId: "fallback-1640774"
             };
         }
 
-        // 主加载函数
+        // 主加载函数（保持去重逻辑不变）
         async function loadBackgroundImage() {
             loadingTip.style.display = "block";
             bgImg.classList.remove("visible"); // 隐藏当前图片，准备加载新图
@@ -308,10 +309,10 @@
                 const currentPeriod = getCurrentPeriod().name;
 
                 if (dailyCache && dailyCache.date === today && dailyCache.period === currentPeriod) {
-                    // 校验缓存图片是否有效（未被全局去重删除）
+                    // 校验缓存图片是否有效
                     const globalUsedIds = getGlobalUsedPhotoIds();
                     if (!globalUsedIds.includes(dailyCache.photoId)) {
-                        await preloadImage(dailyCache.imgUrl); // 预加载+清晰度校验
+                        await preloadImage(dailyCache.imgUrl);
                         bgImg.src = dailyCache.imgUrl;
                         bgImg.classList.add("visible");
                         loadingTip.style.display = "none";
@@ -326,20 +327,16 @@
                 }
 
                 const { keywords } = combinedData;
-                // 获取高清图片（过滤全局去重）
                 const { imgUrl, photoId } = await fetchHighQualityPhoto(keywords);
-                // 预加载+清晰度校验
                 await preloadImage(imgUrl);
-                // 更新DOM和缓存
                 bgImg.src = imgUrl;
-                saveDailyPeriodCachedPhoto({ id: photoId, url: imgUrl }); // 保存当日时段缓存
-                saveGlobalUsedPhotoId(photoId); // 加入全局去重列表
+                saveDailyPeriodCachedPhoto({ id: photoId, url: imgUrl });
+                saveGlobalUsedPhotoId(photoId);
                 bgImg.classList.add("visible");
 
             } catch (error) {
                 console.log("加载图片异常，使用兜底图：", error.message);
-                // 降级显示高清兜底图
-                bgImg.src = "https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080";
+                bgImg.src = "https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1600";
                 bgImg.classList.add("visible");
             } finally {
                 loadingTip.style.display = "none";
